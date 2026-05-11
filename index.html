@@ -77,6 +77,51 @@ body.dark{
 
 body{background:var(--bg-app);color:var(--text-primary)}
 ::-webkit-scrollbar-thumb{background:var(--scrollbar)}
+
+/* ── RESPONSIVE ── */
+.app-layout{display:flex;height:100vh;overflow:hidden;position:relative}
+.main-content{flex:1;overflow:auto;background:var(--bg-main);min-width:0}
+
+/* Sidebar overlay (mobile) */
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:199;backdrop-filter:blur(2px)}
+.sidebar-wrap{position:relative;z-index:200;flex-shrink:0;transition:width .25s ease}
+.sidebar-wrap.open{width:224px}
+.sidebar-wrap.collapsed{width:60px}
+
+/* Mobile: sidebar is drawer */
+@media(max-width:768px){
+  .sidebar-wrap{position:fixed;top:0;left:0;height:100vh;width:0;overflow:hidden}
+  .sidebar-wrap.open{width:240px}
+  .sidebar-wrap.collapsed{width:0}
+  .sidebar-overlay.visible{display:block}
+  .main-content{width:100%;padding-top:0}
+  .mobile-topbar{display:flex!important}
+  .page{padding:16px!important}
+  .kpi-grid{grid-template-columns:1fr 1fr!important}
+  .chart-grid{grid-template-columns:1fr!important}
+  .bottom-grid{grid-template-columns:1fr!important}
+  .filter-row{flex-direction:column!important;gap:8px!important}
+  .form-grid-2{grid-template-columns:1fr!important}
+}
+@media(max-width:480px){
+  .kpi-grid{grid-template-columns:1fr!important}
+}
+
+/* Desktop collapsed sidebar */
+@media(min-width:769px){
+  .mobile-topbar{display:none!important}
+  .sidebar-wrap.collapsed .sidebar-label{display:none}
+  .sidebar-wrap.collapsed .sidebar-title-text{display:none}
+  .sidebar-wrap.collapsed .sidebar-footer-text{display:none}
+  .sidebar-wrap.collapsed .fb-badge-text{display:none}
+  .sidebar-wrap.collapsed .theme-toggle-label{display:none}
+  .sidebar-wrap.collapsed .sidebar-inner{width:60px}
+  .sidebar-wrap.collapsed .nav-item{justify-content:center;padding:10px 0}
+  .sidebar-wrap.collapsed .nav-item span.icon{font-size:20px}
+  .sidebar-wrap.open .sidebar-inner{width:224px}
+}
+.sidebar-inner{height:100%;background:var(--bg-sidebar);display:flex;flex-direction:column;border-right:1px solid #1e293b;overflow:hidden;transition:width .25s ease}
+.mobile-topbar{display:none;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-sidebar);border-bottom:1px solid #1e293b;position:sticky;top:0;z-index:100}
 </style>
 </head>
 <body>
@@ -245,7 +290,7 @@ function Toast({msg,type,onClose}){
 function ConfirmModal({msg,onConfirm,onCancel}){
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:"var(--bg-card)",borderRadius:14,padding:"28px 32px",maxWidth:360,width:"90%",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.25)"}}>
+      <div style={{background:"var(--bg-card)",borderRadius:14,padding:"22px 20px",maxWidth:360,width:"calc(100% - 32px)",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.25)"}}>
         <div style={{fontSize:36,marginBottom:12}}>⚠️</div>
         <p style={{fontSize:14,color:"var(--text-secondary)",marginBottom:24,lineHeight:1.6}}>{msg}</p>
         <div style={{display:"flex",gap:10,justifyContent:"center"}}>
@@ -496,7 +541,16 @@ function App(){
     localStorage.setItem("theme",dark?"dark":"light");
   },[dark]);
 
-  const toggleTheme=()=>setDark(d=>!d);
+  const [sidebarOpen,setSidebarOpen]=useState(()=>window.innerWidth>768);
+  const toggleSidebar=()=>setSidebarOpen(s=>!s);
+  const closeSidebar=()=>{ if(window.innerWidth<=768) setSidebarOpen(false); };
+
+  // Close sidebar on resize to mobile
+  useEffect(()=>{
+    const onResize=()=>{ if(window.innerWidth<=768) setSidebarOpen(false); else setSidebarOpen(true); };
+    window.addEventListener("resize",onResize);
+    return()=>window.removeEventListener("resize",onResize);
+  },[]);
 
   // On mount: conecta ao Firebase automaticamente
   useEffect(()=>{
@@ -631,18 +685,36 @@ function App(){
       {!user
         ?<LoginPage db={db} onLogin={login} toast={toast}/>
         :(
-          <div style={{display:"flex",height:"100vh",overflow:"hidden"}}>
-            <Sidebar page={page} setPage={setPage} user={user} onLogout={logout}
-              canLog={canLog} canUsers={canUsers} fbReady={fbReady} syncing={syncing}
-              onDisconnect={disconnectFirebase} dark={dark} toggleTheme={toggleTheme}/>
-            <main style={{flex:1,overflow:"auto",background:"var(--bg-main)"}}>
+          <div className="app-layout">
+            {/* Overlay for mobile */}
+            <div className={`sidebar-overlay${sidebarOpen&&window.innerWidth<=768?" visible":""}`} onClick={closeSidebar}/>
+            <div className={`sidebar-wrap${sidebarOpen?" open":" collapsed"}`}>
+              <Sidebar page={page} setPage={p=>{setPage(p);closeSidebar();}} user={user} onLogout={logout}
+                canLog={canLog} canUsers={canUsers} fbReady={fbReady} syncing={syncing}
+                onDisconnect={disconnectFirebase} dark={dark} toggleTheme={toggleTheme}
+                sidebarOpen={sidebarOpen} toggleSidebar={toggleSidebar}/>
+            </div>
+            <div className="main-content">
+              {/* Mobile top bar */}
+              <div className="mobile-topbar">
+                <button onClick={toggleSidebar}
+                  style={{background:"none",border:"none",cursor:"pointer",fontSize:22,color:"#94a3b8",padding:4,lineHeight:1}}>☰</button>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{width:28,height:28,background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>✝</div>
+                  <span style={{fontSize:14,fontWeight:700,color:"#f1f5f9"}}>Gestão Financeira</span>
+                </div>
+                <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{width:8,height:8,borderRadius:"50%",background:fbReady?"#22c55e":"#f59e0b",display:"inline-block"}}/>
+                  <button onClick={toggleTheme} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,padding:4}}>{dark?"🌙":"☀️"}</button>
+                </div>
+              </div>
               {page==="dashboard"&&<DashboardPage db={db} toast={toast} fbReady={fbReady}/>}
               {page==="income"&&<IncomePage db={db} updateDb={updateDb} user={user} toast={toast} showConfirm={showConfirm} addLog={addLog} fbReady={fbReady}/>}
               {page==="expenses"&&<ExpensesPage db={db} updateDb={updateDb} user={user} toast={toast} showConfirm={showConfirm} addLog={addLog} fbReady={fbReady}/>}
               {page==="users"&&canUsers&&<UsersPage db={db} updateDb={updateDb} user={user} toast={toast} showConfirm={showConfirm} addLog={addLog} fbReady={fbReady}/>}
               {page==="logs"&&canLog&&<LogPage db={db}/>}
               {page==="profile"&&<ProfilePage user={user} db={db} updateDb={updateDb} setUser={setUser} toast={toast} addLog={addLog} fbReady={fbReady}/>}
-            </main>
+            </div>
           </div>
         )}
     </>
@@ -657,8 +729,16 @@ function LoginPage({db,onLogin,toast}){
   const [pass,setPass]=useState("");
   const [show,setShow]=useState(false);
   const [loading,setLoading]=useState(false);
+
+  // Rate limiting: max 5 attempts per 60s (stored in module-level ref, not state)
+  const attempts=useRef({count:0,ts:Date.now()});
+
   const handle=()=>{
     if(!email||!pass){toast("Preencha usuário e senha","error");return}
+    // Rate limit check
+    const now=Date.now();
+    if(now-attempts.current.ts>60000){attempts.current={count:0,ts:now}} // reset after 60s
+    if(attempts.current.count>=5){toast("Muitas tentativas. Aguarde 1 minuto.","error");return}
     setLoading(true);
     setTimeout(()=>{
       const q=email.toLowerCase().trim();
@@ -667,37 +747,36 @@ function LoginPage({db,onLogin,toast}){
         (u.email&&u.email.toLowerCase()===q)||
         u.name.toLowerCase()===q
       )&&u.password===pass&&u.active);
-      if(u)onLogin(u);
-      else{toast("Credenciais inválidas ou usuário inativo","error");setLoading(false)}
-    },600);
+      if(u){attempts.current.count=0;onLogin(u);}
+      else{attempts.current.count++;toast(`Credenciais inválidas ou usuário inativo${attempts.current.count>=3?` (${5-attempts.current.count} tentativas restantes)`:""}` ,"error");setLoading(false)}
+    },700);
   };
   return(
-    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:16,
       background:"linear-gradient(135deg,#0f172a 0%,#1e3a5f 50%,#0f172a 100%)"}}>
-      <div style={{background:"var(--bg-card)",borderRadius:20,padding:"48px 40px",width:400,
+      <div style={{background:"var(--bg-card)",borderRadius:20,padding:"40px 32px",width:"100%",maxWidth:400,
         boxShadow:"0 30px 80px rgba(0,0,0,.35)",animation:"fadeIn .4s ease"}}>
-        <div style={{textAlign:"center",marginBottom:36}}>
-          <div style={{width:70,height:70,background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:"50%",
-            margin:"0 auto 16px",display:"flex",alignItems:"center",justifyContent:"center",
+        <div style={{textAlign:"center",marginBottom:32}}>
+          <div style={{width:64,height:64,background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:"50%",
+            margin:"0 auto 14px",display:"flex",alignItems:"center",justifyContent:"center",
             boxShadow:"0 8px 24px rgba(124,58,237,.35)"}}>
-            <span style={{fontSize:32,color:"#fff"}}>✝</span>
+            <span style={{fontSize:28,color:"#fff"}}>✝</span>
           </div>
-          <h1 style={{fontSize:22,fontWeight:800,color:"var(--text-primary)",marginBottom:4}}>Gestão Financeira</h1>
+          <h1 style={{fontSize:21,fontWeight:800,color:"var(--text-primary)",marginBottom:4}}>Gestão Financeira</h1>
           <p style={{fontSize:13,color:"var(--text-muted)"}}>Painel Administrativo da Igreja</p>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:16}}>
           <div>
             <label style={{fontSize:12,fontWeight:700,color:"var(--text-secondary)",display:"block",marginBottom:6}}>Usuário</label>
             <input value={email} onChange={e=>setEmail(e.target.value)} type="text" placeholder="@usuário ou e-mail"
-              onKeyDown={e=>e.key==="Enter"&&handle()}
-              style={{width:"100%",padding:"12px 14px",border:`1.5px solid ${email?"#1d4ed8":"#e5e7eb"}`,borderRadius:10,fontSize:14,outline:"none"}}/>
+              maxLength={120} onKeyDown={e=>e.key==="Enter"&&handle()} style={IS}/>
           </div>
           <div>
             <label style={{fontSize:12,fontWeight:700,color:"var(--text-secondary)",display:"block",marginBottom:6}}>Senha</label>
             <div style={{position:"relative"}}>
               <input value={pass} onChange={e=>setPass(e.target.value)} type={show?"text":"password"} placeholder="••••••••"
-                onKeyDown={e=>e.key==="Enter"&&handle()}
-                style={{width:"100%",padding:"12px 44px 12px 14px",border:`1.5px solid ${pass?"#1d4ed8":"#e5e7eb"}`,borderRadius:10,fontSize:14,outline:"none"}}/>
+                maxLength={100} onKeyDown={e=>e.key==="Enter"&&handle()}
+                style={{...IS,paddingRight:44}}/>
               <button onClick={()=>setShow(s=>!s)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",
                 background:"none",border:"none",cursor:"pointer",fontSize:18,color:"var(--text-muted)"}}>{show?"🙈":"👁"}</button>
             </div>
@@ -717,7 +796,7 @@ function LoginPage({db,onLogin,toast}){
 // ════════════════════════════════════════════════════════════════
 //  SIDEBAR
 // ════════════════════════════════════════════════════════════════
-function Sidebar({page,setPage,user,onLogout,canLog,canUsers,fbReady,syncing,onDisconnect,dark,toggleTheme}){
+function Sidebar({page,setPage,user,onLogout,canLog,canUsers,fbReady,syncing,onDisconnect,dark,toggleTheme,sidebarOpen,toggleSidebar}){
   const items=[
     {id:"dashboard",icon:"📊",label:"Painel BI"},
     {id:"income",icon:"💰",label:"Entradas"},
@@ -726,62 +805,113 @@ function Sidebar({page,setPage,user,onLogout,canLog,canUsers,fbReady,syncing,onD
     ...(canLog?[{id:"logs",icon:"📋",label:"Histórico de Log"}]:[]),
     {id:"profile",icon:"👤",label:"Meu Perfil"},
   ];
+  const collapsed=!sidebarOpen;
   return(
-    <div style={{width:224,background:"var(--bg-sidebar)",display:"flex",flexDirection:"column",flexShrink:0,borderRight:"1px solid #1e293b"}}>
-      <div style={{padding:"18px 16px 14px",borderBottom:"1px solid #1e293b"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-          <div style={{width:36,height:36,background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",
-            borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>✝</div>
-          <div>
-            <div style={{fontSize:13,fontWeight:700,color:"#f1f5f9"}}>Igreja</div>
-            <div style={{fontSize:10,color:"var(--text-muted)"}}>Gestão Financeira</div>
-          </div>
+    <div className="sidebar-inner">
+      {/* Header */}
+      <div style={{padding:collapsed?"14px 0":"18px 16px 14px",borderBottom:"1px solid #1e293b",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:collapsed?"center":"space-between",gap:8,marginBottom:collapsed?0:10}}>
+          {!collapsed&&(
+            <div style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0}}>
+              <div style={{width:34,height:34,background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:"50%",
+                display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>✝</div>
+              <div className="sidebar-title-text" style={{minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:700,color:"#f1f5f9",whiteSpace:"nowrap"}}>Igreja</div>
+                <div style={{fontSize:10,color:"var(--text-muted)",whiteSpace:"nowrap"}}>Gestão Financeira</div>
+              </div>
+            </div>
+          )}
+          {collapsed&&(
+            <div style={{width:34,height:34,background:"linear-gradient(135deg,#1d4ed8,#7c3aed)",borderRadius:"50%",
+              display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>✝</div>
+          )}
+          <button onClick={toggleSidebar} title={collapsed?"Expandir menu":"Recolher menu"}
+            style={{background:"none",border:"none",cursor:"pointer",color:"#64748b",fontSize:18,
+              padding:"4px",borderRadius:6,lineHeight:1,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {collapsed?"→":"←"}
+          </button>
         </div>
-        {/* Firebase status badge */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-          background:"#1e293b",borderRadius:8,padding:"6px 10px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:6}}>
-            {syncing?<Spinner size={12} color="#f59e0b"/>:<span style={{width:8,height:8,borderRadius:"50%",
-              background:fbReady?"#22c55e":"#f59e0b",display:"inline-block",flexShrink:0}}/>}
-            <span style={{fontSize:10,color:fbReady?"#86efac":"#fcd34d",fontWeight:600}}>
-              {syncing?"Sincronizando...":fbReady?"🔥 Firebase":"💾 Local"}
-            </span>
+        {/* Firebase badge */}
+        {!collapsed&&(
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+            background:"#1e293b",borderRadius:8,padding:"5px 8px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:5}}>
+              {syncing?<Spinner size={10} color="#f59e0b"/>:<span style={{width:7,height:7,borderRadius:"50%",
+                background:fbReady?"#22c55e":"#f59e0b",display:"inline-block",flexShrink:0}}/>}
+              <span className="fb-badge-text" style={{fontSize:10,color:fbReady?"#86efac":"#fcd34d",fontWeight:600}}>
+                {syncing?"Sincronizando...":fbReady?"🔥 Firebase":"💾 Local"}
+              </span>
+            </div>
+            {fbReady&&<button onClick={onDisconnect} title="Reconectar"
+              style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",fontSize:13,lineHeight:1}}>⚙</button>}
           </div>
-          {fbReady&&<button onClick={onDisconnect} title="Reconectar Firebase"
-            style={{background:"none",border:"none",color:"var(--text-muted)",cursor:"pointer",fontSize:14,lineHeight:1}}>⚙</button>}
-        </div>
+        )}
+        {collapsed&&(
+          <div style={{display:"flex",justifyContent:"center",marginTop:8}}>
+            <span style={{width:8,height:8,borderRadius:"50%",background:fbReady?"#22c55e":"#f59e0b",display:"inline-block"}}/>
+          </div>
+        )}
       </div>
-      <nav style={{flex:1,padding:"10px 8px",overflow:"auto"}}>
+
+      {/* Nav */}
+      <nav style={{flex:1,padding:collapsed?"8px 4px":"10px 8px",overflow:"auto"}}>
         {items.map(item=>(
           <button key={item.id} onClick={()=>setPage(item.id)}
-            style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 12px",
+            className={`nav-item${collapsed?" nav-collapsed":""}`}
+            title={collapsed?item.label:""}
+            style={{display:"flex",alignItems:"center",gap:collapsed?0:10,width:"100%",
+              padding:collapsed?"10px 0":"10px 12px",justifyContent:collapsed?"center":"flex-start",
               background:page===item.id?"var(--bg-sidebar-hover)":"transparent",border:"none",borderRadius:9,
               color:page===item.id?"#fff":"#94a3b8",fontSize:13,fontWeight:page===item.id?700:400,
               cursor:"pointer",marginBottom:3,textAlign:"left",transition:"all .15s"}}>
-            <span style={{fontSize:16}}>{item.icon}</span>{item.label}
+            <span className="icon" style={{fontSize:collapsed?20:16,flexShrink:0}}>{item.icon}</span>
+            {!collapsed&&<span className="sidebar-label">{item.label}</span>}
           </button>
         ))}
       </nav>
-      <div style={{padding:"14px 12px",borderTop:"1px solid #1e293b"}}>
+
+      {/* Footer */}
+      <div style={{padding:collapsed?"10px 4px":"14px 12px",borderTop:"1px solid #1e293b",flexShrink:0}}>
         {/* Theme toggle */}
-        <button onClick={toggleTheme}
-          style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
-            padding:"8px 10px",background:"#1e293b",border:"none",borderRadius:8,
-            cursor:"pointer",marginBottom:8}}>
-          <span style={{fontSize:11,color:"var(--text-hint)",fontWeight:600}}>{dark?"🌙 Modo Escuro":"☀️ Modo Claro"}</span>
-          <div style={{width:36,height:20,borderRadius:10,background:dark?"#6366f1":"#94a3b8",
-            position:"relative",transition:"background .25s",flexShrink:0}}>
-            <div style={{position:"absolute",top:2,left:dark?18:2,width:16,height:16,borderRadius:"50%",
-              background:"var(--bg-card)",transition:"left .25s",boxShadow:"0 1px 3px rgba(0,0,0,.3)"}}/>
+        {collapsed?(
+          <button onClick={toggleTheme} title={dark?"Modo Escuro (clique para claro)":"Modo Claro (clique para escuro)"}
+            style={{width:"100%",padding:"8px 0",background:"#1e293b",border:"none",borderRadius:8,
+              cursor:"pointer",fontSize:16,marginBottom:6,display:"flex",justifyContent:"center"}}>
+            {dark?"🌙":"☀️"}
+          </button>
+        ):(
+          <button onClick={toggleTheme}
+            style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
+              padding:"7px 10px",background:"#1e293b",border:"none",borderRadius:8,cursor:"pointer",marginBottom:8}}>
+            <span className="theme-toggle-label" style={{fontSize:11,color:"#94a3b8",fontWeight:600}}>{dark?"🌙 Escuro":"☀️ Claro"}</span>
+            <div style={{width:32,height:18,borderRadius:9,background:dark?"#6366f1":"#475569",position:"relative",transition:"background .25s",flexShrink:0}}>
+              <div style={{position:"absolute",top:2,left:dark?16:2,width:14,height:14,borderRadius:"50%",
+                background:"#fff",transition:"left .25s",boxShadow:"0 1px 3px rgba(0,0,0,.3)"}}/>
+            </div>
+          </button>
+        )}
+        {/* User info */}
+        {collapsed?(
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,marginBottom:6}}>
+            <div style={{width:32,height:32,background:ROLE_CLR[user.role]+"33",borderRadius:"50%",
+              display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:ROLE_CLR[user.role]}}>
+              {user.name.charAt(0).toUpperCase()}
+            </div>
           </div>
+        ):(
+          <div className="sidebar-footer-text" style={{marginBottom:8}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.name}</div>
+            {user.username&&<div style={{fontSize:10,color:"#475569"}}>@{user.username}</div>}
+            <span style={{display:"inline-block",marginTop:3,padding:"2px 7px",background:ROLE_CLR[user.role]+"30",
+              color:ROLE_CLR[user.role],borderRadius:4,fontSize:10,fontWeight:700}}>{ROLE_LABEL[user.role]}</span>
+          </div>
+        )}
+        <button onClick={onLogout} title="Sair"
+          style={{width:"100%",padding:collapsed?"8px 0":"7px",background:"#1e293b",border:"none",
+            borderRadius:8,color:"#f87171",fontSize:collapsed?18:12,cursor:"pointer",fontWeight:700,
+            display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+          {collapsed?"🚪":<>Sair ↩</>}
         </button>
-        <div style={{marginBottom:8}}>
-          <div style={{fontSize:12,fontWeight:700,color:"#e2e8f0",marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.name}</div>
-          <span style={{display:"inline-block",marginTop:4,padding:"2px 8px",background:ROLE_CLR[user.role]+"30",
-            color:ROLE_CLR[user.role],borderRadius:4,fontSize:10,fontWeight:700}}>{ROLE_LABEL[user.role]}</span>
-        </div>
-        <button onClick={onLogout} style={{width:"100%",padding:"8px",background:"#1e293b",border:"none",
-          borderRadius:8,color:"#f87171",fontSize:12,cursor:"pointer",fontWeight:700}}>Sair ↩</button>
       </div>
     </div>
   );
@@ -889,8 +1019,7 @@ function DashboardPage({db,toast,fbReady}){
       s.onload=doIt;s.onerror=()=>toast("Erro ao carregar biblioteca","error");document.head.appendChild(s)}
   };
 
-  return(
-    <div className="page" style={{padding:28}}>
+    <div className="page" style={{padding:"clamp(14px, 4vw, 28px)"}}>
       <PH title="Painel de BI Financeiro" subtitle="Visão geral das finanças da igreja">
         <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
           {pending.length>0&&<div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px",
@@ -899,13 +1028,13 @@ function DashboardPage({db,toast,fbReady}){
           </div>}
           <button onClick={genXLS} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 18px",
             background:"#0f172a",color:"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>
-            📊 Gerar Relatório Excel
+            📊 Gerar Excel
           </button>
         </div>
       </PH>
 
-      {/* ── Filtros do painel ── */}
-      <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap",alignItems:"center",
+      {/* Filtros */}
+      <div className="filter-row" style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap",alignItems:"center",
         background:"var(--bg-card)",padding:"12px 16px",borderRadius:12,border:"1px solid var(--border)"}}>
         <span style={{fontSize:12,fontWeight:700,color:"var(--text-muted)",marginRight:4}}>🔍 Filtros:</span>
         <select value={fYear} onChange={e=>setFYear(e.target.value)} style={{...IS,width:"auto",padding:"6px 10px",fontSize:12}}>
@@ -928,14 +1057,15 @@ function DashboardPage({db,toast,fbReady}){
           </button>
         )}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}}>
+
+      <div className="kpi-grid" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}}>
         {[
           {label:"Total Arrecadado",value:fmt(totalInc),color:"#059669",bg:"#ecfdf5",icon:"📈"},
           {label:"Total de Custos",value:fmt(totalExp),color:"#dc2626",bg:"#fef2f2",icon:"📉"},
           {label:"Saldo em Caixa",value:fmt(balance),color:balance>=0?"#059669":"#dc2626",bg:balance>=0?"#ecfdf5":"#fef2f2",icon:"💼"},
           {label:"Média Mensal",value:fmt(totalInc/Math.max(monthly.filter(m=>m.inc>0).length,1)),color:"#7c3aed",bg:"#f5f3ff",icon:"📊"},
         ].map((k,i)=>(
-          <div key={i} style={{background:"var(--bg-card)",borderRadius:14,padding:"18px 16px",border:"1px solid var(--border)",boxShadow:"0 1px 4px rgba(0,0,0,.05)"}}>
+          <div key={i} style={{background:"var(--bg-card)",borderRadius:14,padding:"18px 16px",border:"1px solid var(--border)",boxShadow:"var(--shadow)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
               <span style={{fontSize:11,fontWeight:700,color:"var(--text-muted)",textTransform:"uppercase",letterSpacing:.5}}>{k.label}</span>
               <span style={{background:k.bg,padding:"4px 8px",borderRadius:8,fontSize:18}}>{k.icon}</span>
@@ -944,7 +1074,7 @@ function DashboardPage({db,toast,fbReady}){
           </div>
         ))}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:14,marginBottom:14}}>
+      <div className="chart-grid" style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:14,marginBottom:14}}>
         <div style={{background:"var(--bg-card)",borderRadius:14,padding:20,border:"1px solid var(--border)"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
             <h3 style={{fontSize:14,fontWeight:700,color:"var(--text-primary)"}}>Evolução Mensal</h3>
@@ -972,8 +1102,8 @@ function DashboardPage({db,toast,fbReady}){
             ))}
           </div>
         </div>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+      </div>{/* end chart-grid */}
+      <div className="bottom-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
         <div style={{background:"var(--bg-card)",borderRadius:14,padding:20,border:"1px solid var(--border)"}}>
           <h3 style={{fontSize:14,fontWeight:700,color:"var(--text-primary)",marginBottom:16}}>Maiores Gastos por Categoria</h3>
           {topCats.length===0&&<p style={{fontSize:13,color:"var(--text-hint)"}}>Nenhum custo registrado.</p>}
@@ -1130,7 +1260,7 @@ function IncomePage({db,updateDb,user,toast,showConfirm,addLog,fbReady}){
   const hasActiveFilters=fYear!=="todos"||fMonth!=="todos"||fType!=="todos"||fUser2!=="todos";
 
   return(
-    <div className="page" style={{padding:28}}>
+    <div className="page" style={{padding:"clamp(14px, 4vw, 28px)"}}>
       <PH title="Entradas Financeiras" subtitle={isAgente?"Suas entradas (aprovação necessária)":"Dízimos e ofertas"}>
         <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
           {!isAgente&&<Pill color="#059669" bg="#ecfdf5">Aprovado: {fmt(approved.reduce((s,i)=>s+i.amount,0))}</Pill>}
@@ -1185,10 +1315,10 @@ function IncomePage({db,updateDb,user,toast,showConfirm,addLog,fbReady}){
           {isAgente&&!editing&&<div style={{background:"#1a1200",border:"1px solid #78500a",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:12,color:"#fbbf24",fontWeight:600}}>
             ⏳ Esta entrada será enviada ao Gestor para aprovação antes de ser contabilizada.
           </div>}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+          <div className="form-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
             <Fld label="Tipo *"><select value={form.type} onChange={e=>set("type",e.target.value)} style={IS}><option value="dizimo">Dízimo</option><option value="oferta">Oferta</option></select></Fld>
-            <Fld label="Valor (R$) *"><input type="number" step="0.01" value={form.amount} onChange={e=>set("amount",e.target.value)} placeholder="0,00" style={IS}/></Fld>
-            <Fld label="Descrição *" span><input value={form.description} onChange={e=>set("description",e.target.value)} placeholder="Ex: Dízimo culto domingo" style={IS}/></Fld>
+            <Fld label="Valor (R$) *"><input type="number" step="0.01" min="0.01" max="9999999" value={form.amount} onChange={e=>set("amount",e.target.value)} placeholder="0,00" style={IS}/></Fld>
+            <Fld label="Descrição *" span><input value={form.description} onChange={e=>set("description",e.target.value)} maxLength={200} placeholder="Ex: Dízimo culto domingo" style={IS}/></Fld>
             <Fld label="Data *"><input type="date" value={form.date} onChange={e=>set("date",e.target.value)} style={IS}/></Fld>
             <Fld label="📎 Comprovante">
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
@@ -1318,7 +1448,7 @@ function ExpensesPage({db,updateDb,user,toast,showConfirm,addLog,fbReady}){
   const hasActiveFilters=fYear!=="todos"||fMonth!=="todos"||fType!=="todos"||fCat!=="todos"||fUser2!=="todos";
 
   return(
-    <div className="page" style={{padding:28}}>
+    <div className="page" style={{padding:"clamp(14px, 4vw, 28px)"}}>
       <PH title="Registro de Custos" subtitle={isReadOnly?"Visualização — somente leitura":"Fixos, variáveis e imprevistos"}>
         <div style={{display:"flex",gap:10,alignItems:"center"}}>
           <Pill color="#dc2626" bg="#fef2f2">Total: {fmt(total)}</Pill>
@@ -1368,21 +1498,21 @@ function ExpensesPage({db,updateDb,user,toast,showConfirm,addLog,fbReady}){
       )}
       {showForm&&(
         <FC title={editing?"Editar Custo":"Novo Custo"} onClose={reset}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+          <div className="form-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
             <Fld label="Categoria *">
               <select value={form.useCustom?"__custom__":form.category}
                 onChange={e=>{if(e.target.value==="__custom__")set("useCustom",true);else{set("useCustom",false);set("category",e.target.value)}}} style={IS}>
                 {DEF_CATS.map(c=><option key={c} value={c}>{c}</option>)}
                 <option value="__custom__">+ Personalizado...</option>
               </select>
-              {form.useCustom&&<input value={form.customCat} onChange={e=>set("customCat",e.target.value)} placeholder="Nome do custo personalizado" style={{...IS,marginTop:8}}/>}
+              {form.useCustom&&<input value={form.customCat} onChange={e=>set("customCat",e.target.value)} maxLength={80} placeholder="Nome do custo personalizado" style={{...IS,marginTop:8}}/>}
             </Fld>
             <Fld label="Tipo *"><select value={form.type} onChange={e=>set("type",e.target.value)} style={IS}>
               <option value="fixo">🟢 Custo Fixo</option><option value="variavel">🟣 Custo Variável</option><option value="imprevisto">🔴 Imprevisto</option>
             </select></Fld>
-            <Fld label="Valor (R$) *"><input type="number" step="0.01" value={form.amount} onChange={e=>set("amount",e.target.value)} placeholder="0,00" style={IS}/></Fld>
+            <Fld label="Valor (R$) *"><input type="number" step="0.01" min="0.01" max="9999999" value={form.amount} onChange={e=>set("amount",e.target.value)} placeholder="0,00" style={IS}/></Fld>
             <Fld label="Data *"><input type="date" value={form.date} onChange={e=>set("date",e.target.value)} style={IS}/></Fld>
-            <Fld label="Descrição" span><input value={form.description} onChange={e=>set("description",e.target.value)} placeholder="Detalhes do custo..." style={IS}/></Fld>
+            <Fld label="Descrição" span><input value={form.description} onChange={e=>set("description",e.target.value)} maxLength={200} placeholder="Detalhes do custo..." style={IS}/></Fld>
           </div>
           <FA onSave={save} onCancel={reset} saveColor="#dc2626" loading={saving}/>
         </FC>
@@ -1444,7 +1574,7 @@ function LogPage({db}){
     return ms&&(fAct==="todos"||l.action===fAct)&&(fUser==="todos"||l.userName===fUser);
   });
   return(
-    <div className="page" style={{padding:28}}>
+    <div className="page" style={{padding:"clamp(14px, 4vw, 28px)"}}>
       <PH title="Histórico de Log" subtitle="Registro completo de todas as ações no sistema">
         <Pill color="#2563eb" bg="#eff6ff">{logs.length} registro{logs.length!==1?"s":""}</Pill>
       </PH>
@@ -1579,7 +1709,7 @@ function UsersPage({db,updateDb,user,toast,showConfirm,addLog,fbReady}){
   };
 
   return(
-    <div className="page" style={{padding:28}}>
+    <div className="page" style={{padding:"clamp(14px, 4vw, 28px)"}}>
       <PH title="Gerenciamento de Usuários" subtitle="Controle de acesso e permissões">
         <Btn color="#7c3aed" onClick={()=>setShowForm(true)}>+ Novo Usuário</Btn>
       </PH>
@@ -1595,16 +1725,16 @@ function UsersPage({db,updateDb,user,toast,showConfirm,addLog,fbReady}){
         <FC title={editId?"Editar Usuário":"Novo Usuário"} onClose={reset}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:16}}>
             <Fld label="Nome completo *">
-              <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="Nome do usuário" style={{...IS,borderColor:fieldErrors.name?"#dc2626":"var(--border-input)"}}/>
+              <input value={form.name} onChange={e=>set("name",e.target.value)} maxLength={80} placeholder="Nome do usuário" style={{...IS,borderColor:fieldErrors.name?"#dc2626":"var(--border-input)"}}/>
               {fieldErrors.name&&<span style={{fontSize:11,color:"#dc2626",marginTop:4,display:"block"}}>{fieldErrors.name}</span>}
             </Fld>
             <Fld label="Nome de usuário (login) *">
-              <input value={form.username} onChange={e=>set("username",e.target.value)} placeholder="@usuario" style={{...IS,borderColor:fieldErrors.username?"#dc2626":"var(--border-input)"}}/>
+              <input value={form.username} onChange={e=>set("username",e.target.value)} maxLength={40} placeholder="@usuario" style={{...IS,borderColor:fieldErrors.username?"#dc2626":"var(--border-input)"}}/>
               {fieldErrors.username?<span style={{fontSize:11,color:"#dc2626",marginTop:4,display:"block"}}>{fieldErrors.username}</span>
                 :<span style={{fontSize:10,color:"var(--text-hint)",marginTop:3,display:"block"}}>Usado para fazer login. Sem espaços.</span>}
             </Fld>
             <Fld label="E-mail (opcional)">
-              <input type="email" value={form.email} onChange={e=>set("email",e.target.value)} placeholder="usuario@email.com" style={{...IS,borderColor:fieldErrors.email?"#dc2626":"var(--border-input)"}}/>
+              <input type="email" value={form.email} onChange={e=>set("email",e.target.value)} maxLength={120} placeholder="usuario@email.com" style={{...IS,borderColor:fieldErrors.email?"#dc2626":"var(--border-input)"}}/>
               {fieldErrors.email&&<span style={{fontSize:11,color:"#dc2626",marginTop:4,display:"block"}}>{fieldErrors.email}</span>}
             </Fld>
             <Fld label={editId?"Nova senha (opcional)":"Senha *"}>
